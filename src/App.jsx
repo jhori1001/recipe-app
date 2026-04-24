@@ -62,7 +62,6 @@ const saleItems = [
   { name: "キャベツ", price: "128円", discount: "旬", category: "野菜" },
 ];
 
-// 写真URL (Unsplash)
 const recipePhotos = {
   "肉じゃが": "https://images.unsplash.com/photo-1547592180-85f173990554?w=400&h=200&fit=crop",
   "豚の生姜焼き": "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=400&h=200&fit=crop",
@@ -81,6 +80,14 @@ const recipePhotos = {
   "もやしと卵の炒め物": "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?w=400&h=200&fit=crop",
   "豆腐チャンプルー": "https://images.unsplash.com/photo-1547592180-85f173990554?w=400&h=200&fit=crop",
   "たけのこご飯": "https://images.unsplash.com/photo-1516684732162-798a0062be99?w=400&h=200&fit=crop",
+  "鮭の塩焼き": "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?w=400&h=200&fit=crop",
+  "茶碗蒸し": "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=400&h=200&fit=crop",
+  "だし巻き卵": "https://images.unsplash.com/photo-1612929633738-8fe44f7ec841?w=400&h=200&fit=crop",
+  "ひじきの煮物": "https://images.unsplash.com/photo-1547592180-85f173990554?w=400&h=200&fit=crop",
+  "筑前煮": "https://images.unsplash.com/photo-1547592180-85f173990554?w=400&h=200&fit=crop",
+  "クリームシチュー": "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=400&h=200&fit=crop",
+  "中華スープ": "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=400&h=200&fit=crop",
+  "親子丼": "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=400&h=200&fit=crop",
   "default": "https://images.unsplash.com/photo-1495521821757-a1efb6729352?w=400&h=200&fit=crop",
 };
 
@@ -324,7 +331,7 @@ export default function RecipeApp() {
       </div>
 
       {/* Tabs */}
-      {tab === "home" && <HomeTab todayMeals={todayMeals} recipes={displayedRecipes} setSelectedRecipe={r => { setSelectedRecipe(r); setServings(2); }} refreshRecipes={refreshRecipes} shoppingList={shoppingList} setTab={setTab} />}
+      {tab === "home" && <HomeTab todayMeals={todayMeals} recipes={displayedRecipes} setSelectedRecipe={r => { setSelectedRecipe(r); setServings(2); }} refreshRecipes={refreshRecipes} shoppingList={shoppingList} setTab={setTab} calendar={calendar} setCalendar={setCalendar} pantry={pantry} allRecipePool={allRecipePool} filterByAllergy={filterByAllergy} />}
       {tab === "ingredients" && <IngredientsTab goal={goal} setGoal={handleGoalChange} flavor={flavor} setFlavor={setFlavor} cuisine={cuisine} setCuisine={handleCuisineChange} flavorLabel={flavorLabel} ingredientInput={ingredientInput} setIngredientInput={setIngredientInput} ingredientAmount={ingredientAmount} setIngredientAmount={setIngredientAmount} pantry={pantry} addToPantry={addToPantry} removeFromPantry={removeFromPantry} filteredRecipes={filterByAllergy(filteredByPantry.length > 0 ? filteredByPantry : displayedRecipes)} setSelectedRecipe={r => { setSelectedRecipe(r); setServings(2); }} pantryNames={pantryNames} hasPantry={filteredByPantry.length > 0} allergies={allergies} setShowAllergyModal={setShowAllergyModal} />}
       {tab === "pantry" && <PantryTab pantry={pantry} removeFromPantry={removeFromPantry} filteredRecipes={filterByAllergy(filteredByPantry)} setSelectedRecipe={r => { setSelectedRecipe(r); setServings(2); }} pantryNames={pantryNames} />}
       {tab === "season" && <SeasonTab seasonItems={seasons[currentSeason]} saleItems={saleItems} selectedSeasonItem={selectedSeasonItem} setSelectedSeasonItem={setSelectedSeasonItem} selectedSaleItem={selectedSaleItem} setSelectedSaleItem={setSelectedSaleItem} seasonRecipes={seasonRecipes} saleRecipes={saleRecipes} setSelectedRecipe={r => { setSelectedRecipe(r); setServings(2); }} />}
@@ -511,59 +518,202 @@ export default function RecipeApp() {
   );
 }
 
-function HomeTab({ todayMeals, recipes, setSelectedRecipe, refreshRecipes, shoppingList, setTab }) {
+function HomeTab({ todayMeals, recipes, setSelectedRecipe, refreshRecipes, shoppingList, setTab, calendar, setCalendar, pantry, allRecipePool, filterByAllergy }) {
+  const today = new Date();
+  const todayStr = today.toISOString().split("T")[0];
+  const weekDays = ["日", "月", "火", "水", "木", "金", "土"];
   const mealColors = { 朝: "#fff8e1", 昼: "#e8f5e9", 夜: "#e3f2fd" };
   const mealTextColors = { 朝: "#f57c00", 昼: "#388e3c", 夜: "#1976d2" };
+  const mealIcons = { 朝: "🌅", 昼: "☀️", 夜: "🌙" };
+
+  // 1ヶ月カレンダー
+  const [calMonth, setCalMonth] = useState(today.getMonth());
+  const [calYear, setCalYear] = useState(today.getFullYear());
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const calCells = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+
+  // 献立生成モーダル
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [planServings, setPlanServings] = useState(2);
+  const [planStartDate, setPlanStartDate] = useState(todayStr);
+  const [planDays, setPlanDays] = useState(7);
+  const [planMeals, setPlanMeals] = useState(["昼", "夜"]);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const togglePlanMeal = (mt) => setPlanMeals(prev => prev.includes(mt) ? prev.filter(x => x !== mt) : [...prev, mt]);
+
+  const generateWeekPlan = () => {
+    setIsGenerating(true);
+    const pool = filterByAllergy(allRecipePool);
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    let idx = 0;
+    const newCal = { ...calendar };
+    for (let d = 0; d < planDays; d++) {
+      const date = new Date(planStartDate + "T00:00:00");
+      date.setDate(date.getDate() + d);
+      const dateStr = date.toISOString().split("T")[0];
+      for (const mt of planMeals) {
+        const key = `${dateStr}_${mt}`;
+        if (!newCal[key]) {
+          newCal[key] = shuffled[idx % shuffled.length];
+          idx++;
+        }
+      }
+    }
+    setCalendar(newCal);
+    setIsGenerating(false);
+    setShowPlanModal(false);
+    alert(`${planDays}日分の献立を生成しました！`);
+  };
+
+  const next14 = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() + i);
+    return d.toISOString().split("T")[0];
+  });
+
   return (
     <>
-      {/* 本日の献立 */}
-      <div className="card">
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>本日の献立</div>
-        {todayMeals.length === 0 ? (
-          <div style={{ fontSize: 13, color: "#aaa", textAlign: "center", padding: "8px 0" }}>まだ登録されていません</div>
-        ) : (
-          todayMeals.map(({ mt, recipe }) => (
-            <div key={mt} className="meal-slot" style={{ background: mealColors[mt] }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: mealTextColors[mt], minWidth: 20 }}>{mt}</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#333" }}>{recipe.name}</span>
-              <span style={{ fontSize: 11, color: "#888", marginLeft: "auto" }}>{recipe.cal}kcal</span>
-            </div>
-          ))
-        )}
+      {/* 日付ヘッダー */}
+      <div style={{ padding: "16px 16px 0" }}>
+        <div style={{ fontSize: 24, fontWeight: 700, color: "#333" }}>
+          {today.getMonth() + 1}月{today.getDate()}日（{weekDays[today.getDay()]}）
+        </div>
+        <div style={{ fontSize: 13, color: "#888", marginTop: 2 }}>{calYear}年</div>
       </div>
-      {/* 買い物リストへのショートカット */}
+
+      {/* 本日の献立 */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>🍽 今日の献立</div>
+          <button onClick={() => setShowPlanModal(true)} style={{ background: "#ff6b35", border: "none", borderRadius: 20, padding: "5px 12px", fontSize: 11, fontWeight: 700, color: "#fff", cursor: "pointer" }}>
+            1週間分を生成
+          </button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          {["朝", "昼", "夜"].map(mt => {
+            const recipe = calendar[`${todayStr}_${mt}`];
+            return (
+              <div key={mt} style={{ background: mealColors[mt], borderRadius: 12, padding: "10px 8px", textAlign: "center", minHeight: 80 }}>
+                <div style={{ fontSize: 16, marginBottom: 4 }}>{mealIcons[mt]}</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: mealTextColors[mt], marginBottom: 4 }}>{mt}ごはん</div>
+                {recipe ? (
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#333", lineHeight: 1.3 }}>{recipe.name}</div>
+                ) : (
+                  <div style={{ fontSize: 10, color: "#bbb" }}>未登録</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 買い物リストショートカット */}
       {shoppingList.length > 0 && (
         <div onClick={() => setTab("shopping")} style={{ margin: "0 16px", background: "#fff3ef", borderRadius: 14, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", border: "2px solid #ff6b35" }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#ff6b35" }}>🛍 買い物リスト</div>
-            <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{shoppingList.length}品目 未購入あり</div>
+            <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>{shoppingList.filter(i => !i.checked).length}品目 未購入</div>
           </div>
-          <span style={{ fontSize: 20 }}>→</span>
+          <span style={{ fontSize: 20, color: "#ff6b35" }}>→</span>
         </div>
       )}
-      {/* レシピ一覧 */}
-      <div style={{ padding: "4px 16px 0" }}>
+
+      {/* 1ヶ月カレンダー */}
+      <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#333" }}>おすすめレシピ</div>
-          <button onClick={refreshRecipes} style={{ background: "#fff3ef", border: "none", borderRadius: 20, padding: "6px 12px", fontSize: 12, fontWeight: 700, color: "#ff6b35", cursor: "pointer" }}>更新 ↺</button>
+          <button onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); } else setCalMonth(m => m - 1); }} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#888" }}>‹</button>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>{calYear}年{calMonth + 1}月</div>
+          <button onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); } else setCalMonth(m => m + 1); }} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#888" }}>›</button>
         </div>
-        {recipes.map((r, i) => (
-          <div key={i} className="recipe-card" onClick={() => setSelectedRecipe(r)}>
-            <img src={getPhoto(r.name)} alt={r.name} style={{ width: "100%", height: 120, objectFit: "cover" }} onError={e => { e.target.src = recipePhotos.default; }} />
-            <div style={{ padding: "10px 14px 12px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>{r.name}</div>
-                <span style={{ fontSize: 11, background: "#f0f0f0", borderRadius: 8, padding: "2px 6px", color: "#666" }}>{r.category}</span>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4 }}>
+          {["日","月","火","水","木","金","土"].map((d, i) => (
+            <div key={d} style={{ textAlign: "center", fontSize: 10, fontWeight: 700, color: i === 0 ? "#e53935" : i === 6 ? "#1976d2" : "#888", padding: "4px 0" }}>{d}</div>
+          ))}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+          {calCells.map((day, i) => {
+            if (!day) return <div key={i} />;
+            const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+            const isToday = dateStr === todayStr;
+            const hasMeal = ["朝","昼","夜"].some(mt => calendar[`${dateStr}_${mt}`]);
+            const dow = (firstDay + day - 1) % 7;
+            return (
+              <div key={i} style={{ textAlign: "center", padding: "6px 2px", borderRadius: 8, background: isToday ? "#ff6b35" : "transparent", position: "relative" }}>
+                <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? "#fff" : dow === 0 ? "#e53935" : dow === 6 ? "#1976d2" : "#333" }}>{day}</div>
+                {hasMeal && <div style={{ width: 4, height: 4, borderRadius: "50%", background: isToday ? "#fff" : "#ff6b35", margin: "2px auto 0" }} />}
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <span style={{ fontSize: 12, color: "#888" }}>⏱ {r.time}</span>
-                <span style={{ fontSize: 12, color: "#ff6b35", fontWeight: 700 }}>{r.cal}kcal</span>
-                <span style={{ fontSize: 12, color: "#888" }}>{r.storage.method}</span>
-              </div>
-            </div>
-          </div>
-        ))}
+            );
+          })}
+        </div>
       </div>
+
+      {/* 今後の献立（3日分） */}
+      <div style={{ padding: "0 16px 16px" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#333", marginBottom: 10 }}>今後の献立</div>
+        {next14.slice(0, 5).map(d => {
+          const date = new Date(d + "T00:00:00");
+          const meals = ["朝","昼","夜"].map(mt => ({ mt, recipe: calendar[`${d}_${mt}`] })).filter(x => x.recipe);
+          if (meals.length === 0) return null;
+          return (
+            <div key={d} style={{ background: "#fff", borderRadius: 12, padding: "10px 14px", marginBottom: 8, boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#888", marginBottom: 6 }}>{date.getMonth() + 1}/{date.getDate()}（{weekDays[date.getDay()]}）</div>
+              {meals.map(({ mt, recipe }) => (
+                <div key={mt} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: mealTextColors[mt], minWidth: 16 }}>{mt}</span>
+                  <span style={{ fontSize: 13, color: "#333" }}>{recipe.name}</span>
+                  <span style={{ fontSize: 11, color: "#aaa", marginLeft: "auto" }}>{recipe.cal}kcal</span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 献立生成モーダル */}
+      {showPlanModal && (
+        <div className="modal-overlay" onClick={() => setShowPlanModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>献立を自動生成</div>
+              <button onClick={() => setShowPlanModal(false)} style={{ background: "#f0f0f0", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: 16 }}>×</button>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>何人前？</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <button onClick={() => setPlanServings(s => Math.max(1, s - 1))} style={{ background: "#eee", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: 18 }}>-</button>
+              <span style={{ fontSize: 18, fontWeight: 700, minWidth: 30, textAlign: "center" }}>{planServings}</span>
+              <button onClick={() => setPlanServings(s => s + 1)} style={{ background: "#eee", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: 18 }}>+</button>
+              <span style={{ fontSize: 13, color: "#888" }}>人前</span>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>開始日</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+              {Array.from({ length: 7 }, (_, i) => {
+                const d = new Date(); d.setDate(d.getDate() + i);
+                const ds = d.toISOString().split("T")[0];
+                const label = i === 0 ? "今日" : `${d.getMonth()+1}/${d.getDate()}`;
+                return (
+                  <button key={ds} onClick={() => setPlanStartDate(ds)} style={{ padding: "6px 12px", borderRadius: 20, border: "none", cursor: "pointer", background: planStartDate === ds ? "#ff6b35" : "#f5f5f5", color: planStartDate === ds ? "#fff" : "#555", fontSize: 12, fontWeight: 700 }}>{label}</button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>日数</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              {[3, 5, 7, 14].map(n => (
+                <button key={n} onClick={() => setPlanDays(n)} style={{ flex: 1, padding: "8px 0", borderRadius: 12, border: "none", cursor: "pointer", background: planDays === n ? "#ff6b35" : "#f5f5f5", color: planDays === n ? "#fff" : "#555", fontSize: 13, fontWeight: 700 }}>{n}日</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>食事</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+              {["朝", "昼", "夜"].map(mt => (
+                <button key={mt} onClick={() => togglePlanMeal(mt)} style={{ flex: 1, padding: "8px 0", borderRadius: 12, border: "none", cursor: "pointer", background: planMeals.includes(mt) ? "#ff6b35" : "#f5f5f5", color: planMeals.includes(mt) ? "#fff" : "#555", fontSize: 14, fontWeight: 700 }}>{mt}</button>
+              ))}
+            </div>
+            <button className="btn" onClick={generateWeekPlan} disabled={planMeals.length === 0} style={{ width: "100%", background: planMeals.length === 0 ? "#ccc" : "linear-gradient(135deg, #ff6b35, #f7931e)", color: "#fff", fontSize: 15, padding: "14px" }}>
+              {isGenerating ? "生成中..." : `${planDays}日分の献立を生成する`}
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -619,8 +769,8 @@ function IngredientsTab({ goal, setGoal, flavor, setFlavor, cuisine, setCuisine,
       <div className="card" style={{ margin: "0 0 12px" }}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>食材を入力</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <input type="text" placeholder="食材名" value={ingredientInput} onChange={e => setIngredientInput(e.target.value)} style={{ flex: 1 }} onKeyDown={e => e.key === "Enter" && addToPantry()} />
-          <input type="text" placeholder="量" value={ingredientAmount} onChange={e => setIngredientAmount(e.target.value)} style={{ width: 80 }} onKeyDown={e => e.key === "Enter" && addToPantry()} />
+          <input type="text" placeholder="食材名" value={ingredientInput} onChange={e => setIngredientInput(e.target.value)} style={{ flex: 2, minWidth: 0 }} onKeyDown={e => e.key === "Enter" && addToPantry()} />
+          <input type="text" placeholder="量" value={ingredientAmount} onChange={e => setIngredientAmount(e.target.value)} style={{ flex: 1, minWidth: 0 }} onKeyDown={e => e.key === "Enter" && addToPantry()} />
         </div>
         <button className="btn" onClick={addToPantry} style={{ width: "100%", background: "linear-gradient(135deg, #ff6b35, #f7931e)", color: "#fff", fontSize: 14 }}>追加する</button>
       </div>
@@ -794,7 +944,6 @@ function ShoppingListTab({ shoppingList, setShoppingList, supermarketOrder }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700 }}>買い物リスト</div>
-          <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>スーパーの売り場順に並んでいます</div>
         </div>
         {shoppingList.some(i => i.checked) && (
           <button onClick={clearChecked} style={{ background: "#f5f5f5", border: "none", borderRadius: 20, padding: "6px 12px", fontSize: 12, fontWeight: 700, color: "#888", cursor: "pointer" }}>
