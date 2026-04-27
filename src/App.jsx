@@ -333,7 +333,7 @@ export default function RecipeApp() {
       {/* Tabs */}
       {tab === "home" && <HomeTab todayMeals={todayMeals} recipes={displayedRecipes} setSelectedRecipe={r => { setSelectedRecipe(r); setServings(2); }} refreshRecipes={refreshRecipes} shoppingList={shoppingList} setTab={setTab} calendar={calendar} setCalendar={setCalendar} pantry={pantry} allRecipePool={allRecipePool} filterByAllergy={filterByAllergy} />}
       {tab === "ingredients" && <IngredientsTab goal={goal} setGoal={handleGoalChange} flavor={flavor} setFlavor={setFlavor} cuisine={cuisine} setCuisine={handleCuisineChange} flavorLabel={flavorLabel} ingredientInput={ingredientInput} setIngredientInput={setIngredientInput} ingredientAmount={ingredientAmount} setIngredientAmount={setIngredientAmount} pantry={pantry} addToPantry={addToPantry} removeFromPantry={removeFromPantry} filteredRecipes={filterByAllergy(filteredByPantry.length > 0 ? filteredByPantry : displayedRecipes)} setSelectedRecipe={r => { setSelectedRecipe(r); setServings(2); }} pantryNames={pantryNames} hasPantry={filteredByPantry.length > 0} allergies={allergies} setShowAllergyModal={setShowAllergyModal} />}
-      {tab === "pantry" && <PantryTab pantry={pantry} removeFromPantry={removeFromPantry} filteredRecipes={filterByAllergy(filteredByPantry)} setSelectedRecipe={r => { setSelectedRecipe(r); setServings(2); }} pantryNames={pantryNames} />}
+      {tab === "pantry" && <PantryTab pantry={pantry} removeFromPantry={removeFromPantry} filteredRecipes={filterByAllergy(filteredByPantry)} setSelectedRecipe={r => { setSelectedRecipe(r); setServings(2); }} pantryNames={pantryNames} calendar={calendar} setCalendar={setCalendar} filterByAllergy={filterByAllergy} allRecipePool={allRecipePool} />}
       {tab === "season" && <SeasonTab seasonItems={seasons[currentSeason]} saleItems={saleItems} selectedSeasonItem={selectedSeasonItem} setSelectedSeasonItem={setSelectedSeasonItem} selectedSaleItem={selectedSaleItem} setSelectedSaleItem={setSelectedSaleItem} seasonRecipes={seasonRecipes} saleRecipes={saleRecipes} setSelectedRecipe={r => { setSelectedRecipe(r); setServings(2); }} />}
       {tab === "calendar" && <CalendarTab calendar={calendar} next14Days={next14Days} setCalendarRecipeDetail={setCalendarRecipeDetail} />}
       {tab === "shopping" && <ShoppingListTab shoppingList={shoppingList} setShoppingList={setShoppingList} supermarketOrder={supermarketOrder} />}
@@ -535,36 +535,54 @@ function HomeTab({ todayMeals, recipes, setSelectedRecipe, refreshRecipes, shopp
 
   // 献立生成モーダル
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showPlanPreview, setShowPlanPreview] = useState(false);
   const [planServings, setPlanServings] = useState(2);
   const [planStartDate, setPlanStartDate] = useState(todayStr);
   const [planDays, setPlanDays] = useState(7);
   const [planMeals, setPlanMeals] = useState(["昼", "夜"]);
+  const [planGoal, setPlanGoal] = useState("nutrition");
+  const [planFlavor, setPlanFlavor] = useState("normal");
+  const [planCuisine, setPlanCuisine] = useState("すべて");
+  const [planAllergyInput, setPlanAllergyInput] = useState("");
+  const [planAllergies, setPlanAllergies] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [previewPlan, setPreviewPlan] = useState(null);
+  const [calendarDayDetail, setCalendarDayDetail] = useState(null);
 
   const togglePlanMeal = (mt) => setPlanMeals(prev => prev.includes(mt) ? prev.filter(x => x !== mt) : [...prev, mt]);
 
   const generateWeekPlan = () => {
     setIsGenerating(true);
-    const pool = filterByAllergy(allRecipePool);
+    // デザートは除外、フィルタ適用
+    let pool = allRecipePool.filter(r => r.category !== "デザート");
+    if (planGoal !== "nutrition") pool = pool.filter(goalFilters[planGoal] || (() => true));
+    if (planCuisine !== "すべて") pool = pool.filter(r => r.category === planCuisine);
+    const allergiesToUse = [...allergies, ...planAllergies];
+    if (allergiesToUse.length > 0) pool = pool.filter(r => !r.ingredients.some(ing => allergiesToUse.some(a => ing.name.includes(a))));
+    if (pool.length === 0) pool = allRecipePool.filter(r => r.category !== "デザート");
     const shuffled = [...pool].sort(() => Math.random() - 0.5);
     let idx = 0;
-    const newCal = { ...calendar };
+    const newEntries = {};
     for (let d = 0; d < planDays; d++) {
       const date = new Date(planStartDate + "T00:00:00");
       date.setDate(date.getDate() + d);
       const dateStr = date.toISOString().split("T")[0];
       for (const mt of planMeals) {
         const key = `${dateStr}_${mt}`;
-        if (!newCal[key]) {
-          newCal[key] = shuffled[idx % shuffled.length];
-          idx++;
-        }
+        newEntries[key] = shuffled[idx % shuffled.length];
+        idx++;
       }
     }
-    setCalendar(newCal);
+    setPreviewPlan(newEntries);
     setIsGenerating(false);
     setShowPlanModal(false);
-    alert(`${planDays}日分の献立を生成しました！`);
+    setShowPlanPreview(true);
+  };
+
+  const applyPlan = () => {
+    setCalendar(prev => ({ ...prev, ...previewPlan }));
+    setShowPlanPreview(false);
+    setPreviewPlan(null);
   };
 
   const next14 = Array.from({ length: 14 }, (_, i) => {
@@ -631,6 +649,7 @@ function HomeTab({ todayMeals, recipes, setSelectedRecipe, refreshRecipes, shopp
             <div key={d} style={{ textAlign: "center", fontSize: 10, fontWeight: 700, color: i === 0 ? "#e53935" : i === 6 ? "#1976d2" : "#888", padding: "4px 0" }}>{d}</div>
           ))}
         </div>
+      {/* カレンダー日付タップで詳細表示 */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
           {calCells.map((day, i) => {
             if (!day) return <div key={i} />;
@@ -639,7 +658,8 @@ function HomeTab({ todayMeals, recipes, setSelectedRecipe, refreshRecipes, shopp
             const hasMeal = ["朝","昼","夜"].some(mt => calendar[`${dateStr}_${mt}`]);
             const dow = (firstDay + day - 1) % 7;
             return (
-              <div key={i} style={{ textAlign: "center", padding: "6px 2px", borderRadius: 8, background: isToday ? "#ff6b35" : "transparent", position: "relative" }}>
+              <div key={i} onClick={() => hasMeal && setCalendarDayDetail(dateStr)}
+                style={{ textAlign: "center", padding: "6px 2px", borderRadius: 8, background: isToday ? "#ff6b35" : "transparent", position: "relative", cursor: hasMeal ? "pointer" : "default" }}>
                 <div style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? "#fff" : dow === 0 ? "#e53935" : dow === 6 ? "#1976d2" : "#333" }}>{day}</div>
                 {hasMeal && <div style={{ width: 4, height: 4, borderRadius: "50%", background: isToday ? "#fff" : "#ff6b35", margin: "2px auto 0" }} />}
               </div>
@@ -648,7 +668,7 @@ function HomeTab({ todayMeals, recipes, setSelectedRecipe, refreshRecipes, shopp
         </div>
       </div>
 
-      {/* 今後の献立（3日分） */}
+      {/* 今後の献立（5日分） */}
       <div style={{ padding: "0 16px 16px" }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#333", marginBottom: 10 }}>今後の献立</div>
         {next14.slice(0, 5).map(d => {
@@ -659,9 +679,9 @@ function HomeTab({ todayMeals, recipes, setSelectedRecipe, refreshRecipes, shopp
             <div key={d} style={{ background: "#fff", borderRadius: 12, padding: "10px 14px", marginBottom: 8, boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#888", marginBottom: 6 }}>{date.getMonth() + 1}/{date.getDate()}（{weekDays[date.getDay()]}）</div>
               {meals.map(({ mt, recipe }) => (
-                <div key={mt} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                <div key={mt} onClick={() => setCalendarDayDetail(d)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer" }}>
                   <span style={{ fontSize: 10, fontWeight: 700, color: mealTextColors[mt], minWidth: 16 }}>{mt}</span>
-                  <span style={{ fontSize: 13, color: "#333" }}>{recipe.name}</span>
+                  <span style={{ fontSize: 13, color: "#333", textDecoration: "underline" }}>{recipe.name}</span>
                   <span style={{ fontSize: 11, color: "#aaa", marginLeft: "auto" }}>{recipe.cal}kcal</span>
                 </div>
               ))}
@@ -691,9 +711,7 @@ function HomeTab({ todayMeals, recipes, setSelectedRecipe, refreshRecipes, shopp
                 const d = new Date(); d.setDate(d.getDate() + i);
                 const ds = d.toISOString().split("T")[0];
                 const label = i === 0 ? "今日" : `${d.getMonth()+1}/${d.getDate()}`;
-                return (
-                  <button key={ds} onClick={() => setPlanStartDate(ds)} style={{ padding: "6px 12px", borderRadius: 20, border: "none", cursor: "pointer", background: planStartDate === ds ? "#ff6b35" : "#f5f5f5", color: planStartDate === ds ? "#fff" : "#555", fontSize: 12, fontWeight: 700 }}>{label}</button>
-                );
+                return <button key={ds} onClick={() => setPlanStartDate(ds)} style={{ padding: "6px 12px", borderRadius: 20, border: "none", cursor: "pointer", background: planStartDate === ds ? "#ff6b35" : "#f5f5f5", color: planStartDate === ds ? "#fff" : "#555", fontSize: 12, fontWeight: 700 }}>{label}</button>;
               })}
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>日数</div>
@@ -703,14 +721,121 @@ function HomeTab({ todayMeals, recipes, setSelectedRecipe, refreshRecipes, shopp
               ))}
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>食事</div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
               {["朝", "昼", "夜"].map(mt => (
                 <button key={mt} onClick={() => togglePlanMeal(mt)} style={{ flex: 1, padding: "8px 0", borderRadius: 12, border: "none", cursor: "pointer", background: planMeals.includes(mt) ? "#ff6b35" : "#f5f5f5", color: planMeals.includes(mt) ? "#fff" : "#555", fontSize: 14, fontWeight: 700 }}>{mt}</button>
               ))}
             </div>
-            <button className="btn" onClick={generateWeekPlan} disabled={planMeals.length === 0} style={{ width: "100%", background: planMeals.length === 0 ? "#ccc" : "linear-gradient(135deg, #ff6b35, #f7931e)", color: "#fff", fontSize: 15, padding: "14px" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>目的</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 16 }}>
+              {[["diet","🥗 ダイエット"],["nutrition","💪 栄養バランス"],["budget","💰 節約"],["easy","⚡ 簡単"]].map(([k,v]) => (
+                <button key={k} onClick={() => setPlanGoal(k)} style={{ padding: "8px 0", borderRadius: 12, border: "none", cursor: "pointer", background: planGoal === k ? "#ff6b35" : "#f5f5f5", color: planGoal === k ? "#fff" : "#555", fontSize: 12, fontWeight: 700 }}>{v}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>味の濃さ</div>
+            <div style={{ display: "flex", gap: 8, background: "#f5f5f5", borderRadius: 12, padding: 4, marginBottom: 16 }}>
+              {[["light","薄め"],["normal","普通"],["rich","濃いめ"]].map(([k,v]) => (
+                <button key={k} onClick={() => setPlanFlavor(k)} style={{ flex: 1, padding: "7px 0", borderRadius: 10, border: "none", cursor: "pointer", background: planFlavor === k ? "#fff" : "transparent", color: planFlavor === k ? "#ff6b35" : "#888", fontWeight: 700, fontSize: 12, boxShadow: planFlavor === k ? "0 1px 6px rgba(0,0,0,0.1)" : "none" }}>{v}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>ジャンル</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+              {["すべて","和食","中華","洋食"].map(c => (
+                <button key={c} onClick={() => setPlanCuisine(c)} style={{ padding: "6px 12px", borderRadius: 20, border: "none", cursor: "pointer", background: planCuisine === c ? "#ff6b35" : "#f5f5f5", color: planCuisine === c ? "#fff" : "#555", fontSize: 12, fontWeight: 700 }}>{c}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>除外する食材（アレルギーなど）</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input type="text" placeholder="例：えび、小麦..." value={planAllergyInput} onChange={e => setPlanAllergyInput(e.target.value)} style={{ flex: 1 }} onKeyDown={e => { if (e.key === "Enter" && planAllergyInput.trim()) { setPlanAllergies(p => [...new Set([...p, planAllergyInput.trim()])]); setPlanAllergyInput(""); }}} />
+              <button onClick={() => { if (planAllergyInput.trim()) { setPlanAllergies(p => [...new Set([...p, planAllergyInput.trim()])]); setPlanAllergyInput(""); }}} className="btn" style={{ background: "#f5f5f5", color: "#555", padding: "8px 12px" }}>追加</button>
+            </div>
+            {planAllergies.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                {planAllergies.map(a => <span key={a} onClick={() => setPlanAllergies(p => p.filter(x => x !== a))} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#fff0f0", color: "#e53935", borderRadius: 20, padding: "4px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{a} ×</span>)}
+              </div>
+            )}
+            <button className="btn" onClick={generateWeekPlan} disabled={planMeals.length === 0} style={{ width: "100%", background: planMeals.length === 0 ? "#ccc" : "linear-gradient(135deg, #ff6b35, #f7931e)", color: "#fff", fontSize: 15, padding: "14px", marginTop: 8 }}>
               {isGenerating ? "生成中..." : `${planDays}日分の献立を生成する`}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 献立プレビューモーダル */}
+      {showPlanPreview && previewPlan && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>生成された献立の確認</div>
+              <button onClick={() => setShowPlanPreview(false)} style={{ background: "#f0f0f0", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: 16 }}>×</button>
+            </div>
+            <div style={{ maxHeight: "55vh", overflowY: "auto", marginBottom: 16 }}>
+              {Object.entries(previewPlan).sort(([a],[b]) => a.localeCompare(b)).map(([key, recipe]) => {
+                const [dateStr, mt] = key.split("_");
+                const date = new Date(dateStr + "T00:00:00");
+                const mealColors2 = { 朝: "#fff8e1", 昼: "#e8f5e9", 夜: "#e3f2fd" };
+                return (
+                  <div key={key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #f5f5f5" }}>
+                    <div style={{ minWidth: 60, fontSize: 12, color: "#888" }}>{date.getMonth()+1}/{date.getDate()}（{["日","月","火","水","木","金","土"][date.getDay()]}）</div>
+                    <span style={{ background: mealColors2[mt], borderRadius: 8, padding: "2px 8px", fontSize: 11, fontWeight: 700, color: mt === "朝" ? "#f57c00" : mt === "昼" ? "#388e3c" : "#1976d2" }}>{mt}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{recipe.name}</span>
+                    <span style={{ fontSize: 11, color: "#aaa" }}>{recipe.cal}kcal</span>
+                  </div>
+                );
+              })}
+            </div>
+            <button className="btn" onClick={applyPlan} style={{ width: "100%", background: "linear-gradient(135deg, #ff6b35, #f7931e)", color: "#fff", fontSize: 15, padding: "14px", marginBottom: 10 }}>
+              これで決定する ✓
+            </button>
+            <button className="btn" onClick={() => { setShowPlanPreview(false); setShowPlanModal(true); }} style={{ width: "100%", background: "#f5f5f5", color: "#555", fontSize: 13, padding: "12px" }}>
+              やり直す
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* カレンダー日付タップ → 詳細・編集・削除モーダル */}
+      {calendarDayDetail && (
+        <div className="modal-overlay" onClick={() => setCalendarDayDetail(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            {(() => {
+              const date = new Date(calendarDayDetail + "T00:00:00");
+              const meals = ["朝","昼","夜"].map(mt => ({ mt, recipe: calendar[`${calendarDayDetail}_${mt}`] }));
+              const mealColors2 = { 朝: "#fff8e1", 昼: "#e8f5e9", 夜: "#e3f2fd" };
+              const mealTextColors2 = { 朝: "#f57c00", 昼: "#388e3c", 夜: "#1976d2" };
+              return (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700 }}>{date.getMonth()+1}月{date.getDate()}日（{["日","月","火","水","木","金","土"][date.getDay()]}）の献立</div>
+                    <button onClick={() => setCalendarDayDetail(null)} style={{ background: "#f0f0f0", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: 16 }}>×</button>
+                  </div>
+                  {meals.map(({ mt, recipe }) => (
+                    <div key={mt} style={{ background: recipe ? mealColors2[mt] : "#f9f9f9", borderRadius: 14, padding: 14, marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: recipe ? 8 : 0 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: recipe ? mealTextColors2[mt] : "#aaa" }}>{mt}ごはん</span>
+                        {recipe && (
+                          <button onClick={() => { setCalendar(prev => { const n = {...prev}; delete n[`${calendarDayDetail}_${mt}`]; return n; }); }} style={{ background: "#fff", border: "1px solid #eee", borderRadius: 20, padding: "3px 10px", fontSize: 11, cursor: "pointer", color: "#e53935" }}>削除</button>
+                        )}
+                      </div>
+                      {recipe ? (
+                        <>
+                          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{recipe.name}</div>
+                          <div style={{ fontSize: 12, color: "#888" }}>⏱ {recipe.time} · {recipe.cal}kcal</div>
+                          <div style={{ marginTop: 8 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "#666", marginBottom: 4 }}>作り方</div>
+                            {recipe.steps.map((s, i) => (
+                              <div key={i} style={{ fontSize: 12, color: "#555", padding: "2px 0" }}>{i+1}. {s}</div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 12, color: "#bbb" }}>未登録</div>
+                      )}
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -805,10 +930,61 @@ function IngredientsTab({ goal, setGoal, flavor, setFlavor, cuisine, setCuisine,
   );
 }
 
-function PantryTab({ pantry, removeFromPantry, filteredRecipes, setSelectedRecipe, pantryNames }) {
+function PantryTab({ pantry, removeFromPantry, filteredRecipes, setSelectedRecipe, pantryNames, calendar, setCalendar, filterByAllergy, allRecipePool }) {
+  const [showPantryPlanModal, setShowPantryPlanModal] = useState(false);
+  const [pantryPlanDays, setPantryPlanDays] = useState(7);
+  const [pantryPlanMeals, setPantryPlanMeals] = useState(["昼", "夜"]);
+  const [pantryPlanStart, setPantryPlanStart] = useState(new Date().toISOString().split("T")[0]);
+  const [pantryPreview, setPantryPreview] = useState(null);
+  const [showPantryPreview, setShowPantryPreview] = useState(false);
+  const weekDays = ["日","月","火","水","木","金","土"];
+
+  const generatePantryPlan = () => {
+    // パントリー食材を使ったレシピ（デザート除く）を優先
+    const condiments = ["醤油","みりん","砂糖","塩","味噌","酒","だし","ごま油","オリーブ油","バター","片栗粉","天ぷら粉","水","小麦粉","塩こしょう","揚げ油","コンソメ","鶏がらスープの素"];
+    let pool = allRecipePool.filter(r => r.category !== "デザート");
+    if (pantry.length > 0) {
+      const scored = pool.map(r => {
+        const main = r.ingredients.filter(i => !condiments.some(c => i.name.includes(c)));
+        const matched = main.filter(i => pantryNames.some(p => i.name.includes(p) || p.includes(i.name)));
+        return { ...r, score: main.length > 0 ? matched.length / main.length : 0 };
+      });
+      pool = scored.filter(r => r.score > 0).sort((a,b) => b.score - a.score);
+      if (pool.length < 5) pool = [...pool, ...allRecipePool.filter(r => r.category !== "デザート")];
+    }
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    let idx = 0;
+    const entries = {};
+    for (let d = 0; d < pantryPlanDays; d++) {
+      const date = new Date(pantryPlanStart + "T00:00:00");
+      date.setDate(date.getDate() + d);
+      const dateStr = date.toISOString().split("T")[0];
+      for (const mt of pantryPlanMeals) {
+        entries[`${dateStr}_${mt}`] = shuffled[idx % shuffled.length];
+        idx++;
+      }
+    }
+    setPantryPreview(entries);
+    setShowPantryPlanModal(false);
+    setShowPantryPreview(true);
+  };
+
+  const applyPantryPlan = () => {
+    setCalendar(prev => ({ ...prev, ...pantryPreview }));
+    setShowPantryPreview(false);
+    setPantryPreview(null);
+  };
+
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>今家にある食材</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 700 }}>今家にある食材</div>
+        {pantry.length > 0 && (
+          <button onClick={() => setShowPantryPlanModal(true)} style={{ background: "#ff6b35", border: "none", borderRadius: 20, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: "#fff", cursor: "pointer" }}>
+            1週間分を生成
+          </button>
+        )}
+      </div>
       {pantry.length === 0 ? (
         <div className="card" style={{ margin: 0, textAlign: "center", color: "#888", fontSize: 14, padding: 24 }}>「食材入力」タブから食材を追加してください</div>
       ) : (
@@ -844,6 +1020,67 @@ function PantryTab({ pantry, removeFromPantry, filteredRecipes, setSelectedRecip
             </div>
           )) : <div className="card" style={{ margin: 0, textAlign: "center", color: "#888", fontSize: 14 }}>該当するレシピが見つかりません</div>}
         </>
+      )}
+
+      {/* パントリー献立生成モーダル */}
+      {showPantryPlanModal && (
+        <div className="modal-overlay" onClick={() => setShowPantryPlanModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>パントリーで献立を生成</div>
+              <button onClick={() => setShowPantryPlanModal(false)} style={{ background: "#f0f0f0", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: 16 }}>×</button>
+            </div>
+            <div style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>今ある食材を優先的に使った献立を生成します</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>開始日</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+              {Array.from({ length: 7 }, (_, i) => {
+                const d = new Date(); d.setDate(d.getDate() + i);
+                const ds = d.toISOString().split("T")[0];
+                const label = i === 0 ? "今日" : `${d.getMonth()+1}/${d.getDate()}`;
+                return <button key={ds} onClick={() => setPantryPlanStart(ds)} style={{ padding: "6px 12px", borderRadius: 20, border: "none", cursor: "pointer", background: pantryPlanStart === ds ? "#ff6b35" : "#f5f5f5", color: pantryPlanStart === ds ? "#fff" : "#555", fontSize: 12, fontWeight: 700 }}>{label}</button>;
+              })}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>日数</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              {[3, 5, 7].map(n => <button key={n} onClick={() => setPantryPlanDays(n)} style={{ flex: 1, padding: "8px 0", borderRadius: 12, border: "none", cursor: "pointer", background: pantryPlanDays === n ? "#ff6b35" : "#f5f5f5", color: pantryPlanDays === n ? "#fff" : "#555", fontSize: 13, fontWeight: 700 }}>{n}日</button>)}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#666", marginBottom: 8 }}>食事</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+              {["朝","昼","夜"].map(mt => <button key={mt} onClick={() => setPantryPlanMeals(p => p.includes(mt) ? p.filter(x => x !== mt) : [...p, mt])} style={{ flex: 1, padding: "8px 0", borderRadius: 12, border: "none", cursor: "pointer", background: pantryPlanMeals.includes(mt) ? "#ff6b35" : "#f5f5f5", color: pantryPlanMeals.includes(mt) ? "#fff" : "#555", fontSize: 14, fontWeight: 700 }}>{mt}</button>)}
+            </div>
+            <button className="btn" onClick={generatePantryPlan} disabled={pantryPlanMeals.length === 0} style={{ width: "100%", background: pantryPlanMeals.length === 0 ? "#ccc" : "linear-gradient(135deg, #ff6b35, #f7931e)", color: "#fff", fontSize: 15, padding: "14px" }}>
+              {pantryPlanDays}日分の献立を生成する
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* パントリー献立プレビュー */}
+      {showPantryPreview && pantryPreview && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>生成された献立の確認</div>
+              <button onClick={() => setShowPantryPreview(false)} style={{ background: "#f0f0f0", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: 16 }}>×</button>
+            </div>
+            <div style={{ maxHeight: "55vh", overflowY: "auto", marginBottom: 16 }}>
+              {Object.entries(pantryPreview).sort(([a],[b]) => a.localeCompare(b)).map(([key, recipe]) => {
+                const [dateStr, mt] = key.split("_");
+                const date = new Date(dateStr + "T00:00:00");
+                const mealColors2 = { 朝: "#fff8e1", 昼: "#e8f5e9", 夜: "#e3f2fd" };
+                return (
+                  <div key={key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #f5f5f5" }}>
+                    <div style={{ minWidth: 60, fontSize: 12, color: "#888" }}>{date.getMonth()+1}/{date.getDate()}（{weekDays[date.getDay()]}）</div>
+                    <span style={{ background: mealColors2[mt], borderRadius: 8, padding: "2px 8px", fontSize: 11, fontWeight: 700, color: mt === "朝" ? "#f57c00" : mt === "昼" ? "#388e3c" : "#1976d2" }}>{mt}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{recipe.name}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <button className="btn" onClick={applyPantryPlan} style={{ width: "100%", background: "linear-gradient(135deg, #ff6b35, #f7931e)", color: "#fff", fontSize: 15, padding: "14px", marginBottom: 10 }}>これで決定する ✓</button>
+            <button className="btn" onClick={() => { setShowPantryPreview(false); setShowPantryPlanModal(true); }} style={{ width: "100%", background: "#f5f5f5", color: "#555", fontSize: 13, padding: "12px" }}>やり直す</button>
+          </div>
+        </div>
       )}
     </div>
   );
