@@ -186,7 +186,7 @@ export const CM: React.FC = () => {
         <Sequence key={l.id} from={l.from} durationInFrames={l.dur} layout="none">
           {l.big ? <BigNumber text={l.big} dur={l.dur} /> : l.telop ? <Telop text={l.telop} /> : null}
           <Subtitle line={l} />
-          {HAS_AUDIO ? <Audio src={staticFile(`voice/${l.id}.wav`)} /> : null}
+          {HAS_AUDIO ? <Audio src={staticFile(`voice/${l.id}.wav`)} volume={1.4} /> : null}
         </Sequence>
       ))}
       <div style={{ position: 'absolute', right: 28, bottom: 14, fontFamily: FONT, fontWeight: 800, fontSize: 22, color: 'rgba(255,255,255,.85)' }}>VOICEVOX:春日部つむぎ</div>

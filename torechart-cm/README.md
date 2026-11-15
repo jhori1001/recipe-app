@@ -31,6 +31,17 @@ npx remotion render src/index.ts TorechaCM out/torecha-cm.mp4
 #   プレビュー: npx remotion studio src/index.ts
 ```
 
+### VOICEVOX ENGINE を使わない場合（VOICEVOX CORE 直接）
+
+今回の書き出しはこちらの方法で音声を作っています。
+
+```bash
+# VOICEVOX 公式配布物（voicevox_core 0.17.1 の wheel / VOICEVOX ONNX Runtime 1.17.3 / open_jtalk 辞書 / voicevox_vvm の 0.vvm）を
+# 1つのフォルダ（例: ~/voicevox）に置き、venv に wheel をインストールしておく
+node -e "import('./src/script.ts').then(m=>console.log(JSON.stringify(m.LINES)))" > lines.json
+~/voicevox/venv/bin/python scripts/tts_core.py ~/voicevox lines.json public/voice src/voice.json
+```
+
 台本を直したら `node scripts/tts.mjs` → 書き出し、の順で再実行すれば尺も自動で合います。
 
 ## メモ
@@ -39,3 +50,11 @@ npx remotion render src/index.ts TorechaCM out/torecha-cm.mp4
   （ワンピース 5,278 件 / ポケカ 25,276 件 / 合計 30,554 件）。公式発表の数字があればそちらに差し替えてください（`src/script.ts` 先頭）。
 - クレジット「VOICEVOX:春日部つむぎ」を画面右下に表示しています（VOICEVOX・春日部つむぎ利用規約に基づく表記）。
 - 動画右上に「PR」表記を入れています。
+
+### 書き出し後の変換（スマホ等で再生できるようにする）
+
+Remotion の出力は色形式が `yuvj420p` になり一部プレーヤーで再生できないため、最後に変換します。
+
+```bash
+ffmpeg -i out/torecha-cm.mp4 -c:v libx264 -profile:v main -pix_fmt yuv420p -vf "scale=in_range=full:out_range=limited" -crf 21 -c:a copy -movflags +faststart out/torecha-cm_final.mp4
+```
